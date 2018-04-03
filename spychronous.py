@@ -2,20 +2,19 @@ from multiprocessing import Pool
 import sys
 import signal
 import logging
-from functools import wraps
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 LOG = logging.getLogger(__name__)
 
 class AsyncJob(object):
-    def __init__(self, func=None, items=[], processes=4, timeout=60, max_retries=1, raise_child_exceptions=True):
+    def __init__(self, func=None, items=[], processes=4, timeout=60, retry=0, raise_child_exceptions=True):
         self.func = func
         self.items = items
         self.processes = processes
         self.timeout = timeout
-        self.max_retries = max_retries
+        self.retry = retry
         self.raise_child_exceptions = raise_child_exceptions
-
+    
     # Ctrl+C/SIGINT handling based no https://stackoverflow.com/a/35134329/3577492
     def run(self, items=[], debug=False):
         if not items:
@@ -29,7 +28,7 @@ class AsyncJob(object):
         signal.signal(signal.SIGINT, original_sigint_handler) # Restore the original SIGINT handler in the parent process after a Pool has been created.
         worker_results = [] # list of AsyncResult's
         for item in items:
-            worker_results.append(pool.apply_async(self.retry))
+            worker_results.append(pool.apply_async(handler, [self.func, item]))
         pool.close() # no more work will be submitted to workers
         for r in worker_results:
             try:
@@ -50,28 +49,16 @@ class AsyncJob(object):
         if debug:
             LOG.info('finished...')
 
-    def retry(self):
-        @wraps(self.handler)
-        def wrapped(*args, **kwargs):
-            retries = 0
-            while retries < self.max_retries:
-                try:
-                    return self.handler(*args, **kwargs)
-                except Exception:
-                    pass
-                retries += 1
-        return wrapped
-
-    def handler(self):
-        def wrapper():
-            try:
-                self.func(self.items)
-            except Exception as e:
-                import traceback
-                traceback.print_exc()
-                LOG.error(traceback.format_exc())
-                raise e
-        return wrapper()
+def handler(some_function, *args):
+    def wrapper():
+        try:
+            some_function(*args)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            LOG.error(traceback.format_exc())
+            raise e
+    return wrapper()
 
 def useless_func(number):
     import time
