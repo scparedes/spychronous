@@ -3,10 +3,9 @@ import sys
 import signal
 import logging
 
-logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 LOG = logging.getLogger(__name__)
 
-class AsyncJob(object):
+class Job(object):
     def __init__(self, func=None, items=[], processes=4, timeout=60, retry=0, raise_child_exceptions=True):
         self.func = func
         self.items = items
@@ -15,19 +14,37 @@ class AsyncJob(object):
         self.retry = retry
         self.raise_child_exceptions = raise_child_exceptions
     
-    # Ctrl+C/SIGINT handling based no https://stackoverflow.com/a/35134329/3577492
-    def run(self, items=[], debug=False):
-        if not items:
-            if not self.items and debug:
-                LOG.info('No items...no work to be done.')
-            items = self.items
+    def run_single_processed(self, debug=False):
+        # if not self.items:
+        #     if debug:
+        #         LOG.info('No items...no work to be done.')
+        #     return
         if debug:
-            LOG.info('Beginning asynchronous job...')
+            LOG.info('Beginning single-processed job...')
+        try:
+            map(lambda x: handler(self.func, x), self.items)
+        except Exception as e:
+            if self.raise_child_exceptions:
+                raise e
+            else:
+                if debug:
+                    LOG.info("Logging '%s:%s' but neglecting to raise it" % (e.__class__.__name__, e.message))
+        if debug:
+            LOG.info('Finished job...')
+
+    # Ctrl+C/SIGINT handling based no https://stackoverflow.com/a/35134329/3577492
+    def run_multi_processed(self, debug=False):
+        # if not self.items:
+        #     if debug:
+        #         LOG.info('No items...no work to be done.')
+        #     return
+        if debug:
+            LOG.info('Beginning multi-processed job...')
         original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN) # Make the process ignore SIGINT before a process Pool is created. This way created child processes inherit SIGINT handler.
         pool = Pool(processes=self.processes)
         signal.signal(signal.SIGINT, original_sigint_handler) # Restore the original SIGINT handler in the parent process after a Pool has been created.
         worker_results = [] # list of AsyncResult's
-        for item in items:
+        for item in self.items:
             worker_results.append(pool.apply_async(handler, [self.func, item]))
         pool.close() # no more work will be submitted to workers
         for r in worker_results:
@@ -43,11 +60,11 @@ class AsyncJob(object):
                     raise e
                 else:
                     if debug:
-                        LOG.info("Reporting '%s:%s' but neglecting to raise it" % (e.__class__.__name__, e.message))
+                        LOG.info("Logging '%s:%s' but neglecting to raise it" % (e.__class__.__name__, e.message))
 
         pool.join() # wait for worker processes to terminate
         if debug:
-            LOG.info('finished...')
+            LOG.info('Finished job...')
 
 def handler(some_function, *args):
     def wrapper():
@@ -55,7 +72,6 @@ def handler(some_function, *args):
             some_function(*args)
         except Exception as e:
             import traceback
-            traceback.print_exc()
             LOG.error(traceback.format_exc())
             raise e
     return wrapper()
@@ -69,6 +85,11 @@ def useless_func(number):
     LOG.info(number)
 
 if __name__=='__main__':
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+
     numbers = [1,2,3,4,5]
-    async_job = AsyncJob(func=useless_func, items=numbers, raise_child_exceptions=False)
-    async_job.run(debug=True)
+    job = Job(func=useless_func, items=numbers, raise_child_exceptions=False)
+    job.run_single_processed(debug=True)
+    print 'Successfully ran single processed test!'
+    job.run_multi_processed(debug=True)
+    print 'Successfully ran multi processed test!'
