@@ -9,23 +9,22 @@ _hours = 60*60
 DEFAULT_TIMEOUT = 15 * _hours
 
 class Job(object):
-    def __init__(self, func=None, items=[], processes=4, timeout=DEFAULT_TIMEOUT, retry=0, raise_child_exceptions=True):
+    def __init__(self, func=None, items=[], args=[], processes=4, timeout=DEFAULT_TIMEOUT, retry=0, raise_child_exceptions=True):
         self.func = func
         self.items = items
+        self.args = args
         self.processes = processes
         self.timeout = timeout
         self.retry = retry
         self.raise_child_exceptions = raise_child_exceptions
     
-    def run_single_processed(self, debug=False):
-        # if not self.items:
-        #     if debug:
-        #         LOG.info('No items...no work to be done.')
-        #     return
+    def run_single_processed(self, debug=False): # this short circuits because work isn't requeued...
         if debug:
             LOG.info('Beginning single-processed job...')
         try:
-            map(lambda x: handler(self.func, x), self.items)
+            # import pdb;pdb.set_trace()
+            # import pdb;pdb.set_trace()
+            map(lambda x: handler(self.func, [x] + self.args), self.items)
         except Exception as e:
             if self.raise_child_exceptions:
                 raise e
@@ -37,10 +36,6 @@ class Job(object):
 
     # Ctrl+C/SIGINT handling based no https://stackoverflow.com/a/35134329/3577492
     def run_multi_processed(self, debug=False):
-        # if not self.items:
-        #     if debug:
-        #         LOG.info('No items...no work to be done.')
-        #     return
         if debug:
             LOG.info('Beginning multi-processed job...')
         original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN) # Make the process ignore SIGINT before a process Pool is created. This way created child processes inherit SIGINT handler.
@@ -48,7 +43,7 @@ class Job(object):
         signal.signal(signal.SIGINT, original_sigint_handler) # Restore the original SIGINT handler in the parent process after a Pool has been created.
         worker_results = [] # list of AsyncResult's
         for item in self.items:
-            worker_results.append(pool.apply_async(handler, [self.func, item]))
+            worker_results.append(pool.apply_async(handler, [self.func, [item] + self.args]))
         pool.close() # no more work will be submitted to workers
         for r in worker_results:
             try:
@@ -69,7 +64,8 @@ class Job(object):
         if debug:
             LOG.info('Finished job...')
 
-def handler(some_function, *args):
+def handler(some_function, args):
+    # import pdb;pdb.set_trace()
     def wrapper():
         try:
             some_function(*args)
@@ -87,11 +83,24 @@ def useless_func(number):
         1/0
     LOG.info(number)
 
+def another_useless_func(number, char):
+    import time
+    from random import random
+    time.sleep(random()*5)
+    if number == 2:
+        LOG.info(char)
+
 if __name__=='__main__':
     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
     numbers = [1,2,3,4,5]
     job = Job(func=useless_func, items=numbers, raise_child_exceptions=False)
+    job.run_single_processed(debug=True)
+    print 'Successfully ran single processed test!'
+    job.run_multi_processed(debug=True)
+    print 'Successfully ran multi processed test!'
+
+    job = Job(func=another_useless_func, items=numbers, args=['b'])
     job.run_single_processed(debug=True)
     print 'Successfully ran single processed test!'
     job.run_multi_processed(debug=True)
