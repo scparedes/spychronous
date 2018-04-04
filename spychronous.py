@@ -5,8 +5,11 @@ import logging
 
 LOG = logging.getLogger(__name__)
 
+_hours = 60*60
+DEFAULT_TIMEOUT = 15 * _hours
+
 class Job(object):
-    def __init__(self, func=None, items=[], processes=4, timeout=60, retry=0, raise_child_exceptions=True):
+    def __init__(self, func=None, items=[], processes=4, timeout=DEFAULT_TIMEOUT, retry=0, raise_child_exceptions=True):
         self.func = func
         self.items = items
         self.processes = processes
