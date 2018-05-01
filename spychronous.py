@@ -41,6 +41,8 @@ class Job(object):
         original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN) # Make the process ignore SIGINT before a process Pool is created. This way created child processes inherit SIGINT run_function.
         manager = Manager()
         worker_outputs = manager.list() # captures the return values of functions
+        for item in self.items:
+            item.__del__ = lambda x: pass # because copies of objects are passed, let parent handle del.
         pool = Pool(processes=self.processes)
         signal.signal(signal.SIGINT, original_sigint_handler) # Restore the original SIGINT run_function in the parent process after a Pool has been created.
         worker_statuses = [] # list of AsyncResult's
