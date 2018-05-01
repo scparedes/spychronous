@@ -1,4 +1,4 @@
-from multiprocessing import Pool, Manager
+from multiprocessing import Process, pool, Pool, Manager
 import sys
 import signal
 import logging
@@ -8,14 +8,28 @@ LOG = logging.getLogger(__name__)
 _hours = 60*60
 DEFAULT_TIMEOUT = 15 * _hours
 
+class NoDaemonProcess(Process):
+    # make 'daemon' attribute always return False
+    def _get_daemon(self):
+        return False
+    def _set_daemon(self, value):
+        pass
+    daemon = property(_get_daemon, _set_daemon)
+ 
+# We sub-class multiprocessing.pool.Pool instead of multiprocessing.Pool
+# because the latter is only a wrapper function, not a proper class.
+class NoDaemonProcessPool(pool.Pool):
+    Process = NoDaemonProcess
+
 class Job(object):
-    def __init__(self, func=None, items=[], args=[], processes=4, timeout=DEFAULT_TIMEOUT, retry=0, raise_child_exceptions=True):
+    def __init__(self, func=None, items=[], args=[], processes=4, timeout=DEFAULT_TIMEOUT, no_daemon=False, retry=0, raise_child_exceptions=True):
         self.func = func
         self.items = items
         self.args = args
         self.processes = processes
         self.timeout = timeout
-        self.retry = retry
+        self.no_daemon = no_daemon
+        self.retry = retry # doesn't do anything right now.
         self.raise_child_exceptions = raise_child_exceptions
     
     def run_single_processed(self, debug=False): # this short circuits because work isn't requeued...
@@ -43,7 +57,10 @@ class Job(object):
         worker_outputs = manager.list() # captures the return values of functions
         # for item in self.items:
         #     item.__del__ = do_nothing # because copies of objects are passed, let parent handle del.
-        pool = Pool(processes=self.processes)
+        if self.no_daemon:
+            pool = NoDaemonProcessPool(processes=self.processes)
+        else:
+            pool = Pool(processes=self.processes)
         signal.signal(signal.SIGINT, original_sigint_handler) # Restore the original SIGINT run_function in the parent process after a Pool has been created.
         worker_statuses = [] # list of AsyncResult's
         for item in self.items:
