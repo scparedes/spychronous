@@ -5,8 +5,9 @@ import logging
 
 LOG = logging.getLogger(__name__)
 
-_hours = 60*60
-DEFAULT_TIMEOUT = 15 * _hours
+HOURS = 60*60
+DAYS = HOURS*24
+DEFAULT_TIMEOUT = 30 * DAYS
 
 class NoDaemonProcess(Process):
     # make 'daemon' attribute always return False
@@ -22,14 +23,13 @@ class NoDaemonProcessPool(pool.Pool):
     Process = NoDaemonProcess
 
 class Job(object):
-    def __init__(self, func=None, items=[], args=[], processes=4, timeout=DEFAULT_TIMEOUT, no_daemon=False, retry=0, raise_child_exceptions=True):
+    def __init__(self, func=None, items=[], args=[], processes=4, timeout=DEFAULT_TIMEOUT, no_daemon=False, raise_child_exceptions=True):
         self.func = func
         self.items = items
         self.args = args
         self.processes = processes
         self.timeout = timeout
         self.no_daemon = no_daemon
-        self.retry = retry # doesn't do anything right now.
         self.raise_child_exceptions = raise_child_exceptions
     
     def run_single_processed(self, debug=False): # this short circuits because work isn't requeued...
@@ -124,6 +124,19 @@ def outputting_useless_func(number):
     time.sleep(random()*5)
     return number
 
+# def name_person_dave(person):
+#     person.name = 'dave'
+# class Person(object):
+#     def __init__(self):
+#         self.name = 'no name'
+# def test_updates_made_by_worker_propogate_to_parent():
+
+#     dave = Person()
+#     name_person_job = Job(func=name_person_dave, items=[dave])
+#     name_person_job.run_multi_processed()
+#     print dave.name
+#     assert dave.name == 'dave'
+
 if __name__=='__main__':
     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
@@ -148,3 +161,4 @@ if __name__=='__main__':
     assert set(output) == set(numbers)
     print 'Successfully captured output of multi processed test!'
 
+    # test_updates_made_by_worker_propogate_to_parent()
