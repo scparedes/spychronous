@@ -1,6 +1,9 @@
-from multiprocessing import Process, pool, Pool, Manager
+from multiprocessing import Pool, Manager
+from non_daemonic_process.non_daemonic_processing import NoDaemonProcessPool
 import sys
 import signal
+
+import traceback
 import logging
 
 LOG = logging.getLogger(__name__)
@@ -9,156 +12,114 @@ HOURS = 60*60
 DAYS = HOURS*24
 DEFAULT_TIMEOUT = 30 * DAYS
 
-class NoDaemonProcess(Process):
-    # make 'daemon' attribute always return False
-    def _get_daemon(self):
-        return False
-    def _set_daemon(self, value):
-        pass
-    daemon = property(_get_daemon, _set_daemon)
- 
-# We sub-class multiprocessing.pool.Pool instead of multiprocessing.Pool
-# because the latter is only a wrapper function, not a proper class.
-class NoDaemonProcessPool(pool.Pool):
-    Process = NoDaemonProcess
+class JobPool(object):
+    """Wraps a multiprocessing.Pool with more contextual method names.
+    """
+    def __init__(self, pool):
+        self.pool = pool
 
 class Job(object):
-    def __init__(self, func=None, items=[], args=[], processes=4, timeout=DEFAULT_TIMEOUT, no_daemon=False, raise_child_exceptions=True):
+    """A synchronous job-runner that leverages parallel processing to apply a function to each item in a list.
+        Args:
+            func (function): The function that's applied to each item -- the first parameter must represent a single item from items.
+            items (list): The dataset that's iterated over and transformed with func.
+            args (list): The additional parameters in func's signature proceeding the first required parameter.
+            processes (int):The number of processes you want to enlist for parallelization.
+            timeout (int): The number of seconds a given process in the process pool has to complete its work.
+            no_daemon (bool): This allows processes in the process pool to spawn more pools of processes.
+            suppress_worker_exceptions (bool): Prevents killing a Job and its workers when any given coworker raises an exception.
+    """
+    def __init__(self, func=None, items=[], args=[], processes=4, timeout=DEFAULT_TIMEOUT, no_daemon=False, suppress_worker_exceptions=False):
         self.func = func
         self.items = items
         self.args = args
         self.processes = processes
         self.timeout = timeout
         self.no_daemon = no_daemon
-        self.raise_child_exceptions = raise_child_exceptions
+        self.suppress_worker_exceptions = suppress_worker_exceptions
     
-    def run_single_processed(self, debug=False): # this short circuits because work isn't requeued...
-        if debug:
+    def run_single_processed(self, log_start_finish=False):
+        if log_start_finish:
             LOG.info('Beginning single-processed job...')
-        worker_outputs = list() # captures the return values of functions
-        try:
-            map(lambda x: run_function(self.func, worker_outputs, [x] + self.args), self.items)
-        except Exception as e:
-            if self.raise_child_exceptions:
-                raise e
-            else:
-                if debug:
+        worker_outputs = list() # This will accumulate return values of 'func'.
+        for item in self.items:
+            try:
+                run_function(self.func, [item] + self.args, worker_outputs)
+            except Exception as e:
+                if not self.suppress_worker_exceptions:
+                    raise e
+                else:
                     LOG.info("Logging '%s:%s' but neglecting to raise it" % (e.__class__.__name__, e.message))
-        if debug:
-            LOG.info('Finished job...')
+        if log_start_finish:
+            LOG.info('Finished single-processed job...')
         return worker_outputs
 
-    # Ctrl+C/SIGINT handling based no https://stackoverflow.com/a/35134329/3577492
-    def run_multi_processed(self, debug=False):
-        if debug:
+    def run_multi_processed(self, log_start_finish=False):
+        if log_start_finish:
             LOG.info('Beginning multi-processed job...')
-        original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN) # Make the process ignore SIGINT before a process Pool is created. This way created child processes inherit SIGINT run_function.
+        # The correct way to handle Ctrl+C/SIGINT with multiprocessing.Pool is to:
+        # 1) Make the process ignore SIGINT before a process Pool is created. 
+        #    This way created child processes inherit SIGINT handler.
+        # 2) Restore the original SIGINT handler in the parent process after a Pool has been created.
+        # 3) Wait on the results with timeout because the default blocking waits ignore all signals.
+        # ** Based on https://stackoverflow.com/a/35134329/3577492
+
+        # SIGINT-handling step 1
+        original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+
         manager = Manager()
-        worker_outputs = manager.list() # captures the return values of functions
-        # for item in self.items:
-        #     item.__del__ = do_nothing # because copies of objects are passed, let parent handle del.
+        worker_outputs = manager.list() # This will accumulate return values of 'func'.
+
+        # SIGINT-handling step 2
+        pool_params = {'processes':self.processes,
+                       'maxtasksperchild':1} # In tandum with timeout, this implements the process timeout.
         if self.no_daemon:
-            pool = NoDaemonProcessPool(processes=self.processes)
+            pool = NoDaemonProcessPool(**pool_params)
         else:
-            pool = Pool(processes=self.processes)
-        signal.signal(signal.SIGINT, original_sigint_handler) # Restore the original SIGINT run_function in the parent process after a Pool has been created.
-        worker_statuses = [] # list of AsyncResult's
+            pool = Pool(**pool_params)
+        signal.signal(signal.SIGINT, original_sigint_handler)
+
+        worker_statuses = [] # A list of AsyncResult's.
         for item in self.items:
-            worker_statuses.append(pool.apply_async(run_function, [self.func, worker_outputs, [item] + self.args]))
+            worker_statuses.append(pool.apply_async(run_function, [self.func, [item] + self.args, worker_outputs]))
         pool.close() # no more work will be submitted to workers
+
         for ws in worker_statuses:
             try:
-                ws.get(self.timeout) # check workers for errors -- wait on the results with timeout because the default blocking-waits ignore all signals.
+                # SIGINT-handling step 3
+                ws.get(self.timeout)  # checks for worker errors
             except KeyboardInterrupt:
                 LOG.info('caught KeyboardInterrupt, terminating workers')
                 pool.terminate()
                 raise
             except Exception as e:
-                if self.raise_child_exceptions:
+                if not self.suppress_worker_exceptions:
                     pool.terminate()
                     raise e
                 else:
-                    if debug:
-                        LOG.info("Logging '%s:%s' but neglecting to raise it" % (e.__class__.__name__, e.message))
+                    LOG.info("Logging '%s:%s' but neglecting to raise it" % (e.__class__.__name__, e.message))
 
         pool.join() # wait for worker processes to terminate
-        if debug:
-            LOG.info('Finished job...')
+        if log_start_finish:
+            LOG.info('Finished multi-processed job...')
         return list(worker_outputs)
 
-def run_function(some_function, worker_outputs, args):
-    """
-    This is a method that will be called by every job worker.
-    They run the function and append the output of each run to
-    worker outputs.
+def run_function(some_function, args, worker_outputs):
+    """This is a method that will be called by every Job worker.
+        Args:
+            some_function (function): The function that will be applied to 'args'.
+            args (list): The complete list of args that supplies some_function's signature.
+            worker_outputs (list): The return values of any given some_function result appeneded to this list.
+    
+        Notes:
+            - Stacktraces from exceptions are logged so users can see exactly why a worker failed.
+            - worker_outputs is a multiprocessing.managers.ListProxy for multi_processed Job runs.
     """
     try:
         output = some_function(*args)
         worker_outputs.append(output)
     except Exception as e:
-        import traceback
-        LOG.error(traceback.format_exc())
+        worker_outputs.append(None)
+        stacktrace = traceback.format_exc()
+        LOG.error(stacktrace)
         raise e
-
-# def do_nothing(x):
-#     pass
-
-def useless_func(number):
-    import time
-    from random import random
-    time.sleep(random()*5)
-    if number == 2:
-        1/0 # fails here
-    LOG.info(number)
-
-def another_useless_func(number, char):
-    import time
-    from random import random
-    time.sleep(random()*5)
-    if number == 2:
-        LOG.info(char)
-
-def outputting_useless_func(number):
-    import time
-    from random import random
-    time.sleep(random()*5)
-    return number
-
-# def name_person_dave(person):
-#     person.name = 'dave'
-# class Person(object):
-#     def __init__(self):
-#         self.name = 'no name'
-# def test_updates_made_by_worker_propogate_to_parent():
-
-#     dave = Person()
-#     name_person_job = Job(func=name_person_dave, items=[dave])
-#     name_person_job.run_multi_processed()
-#     print dave.name
-#     assert dave.name == 'dave'
-
-if __name__=='__main__':
-    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
-
-    numbers = [1,2,3,4,5]
-    job = Job(func=useless_func, items=numbers, raise_child_exceptions=False)
-    job.run_single_processed(debug=True)
-    print 'Successfully ran single processed test!'
-    job.run_multi_processed(debug=True)
-    print 'Successfully ran multi processed test!'
-
-    job = Job(func=another_useless_func, items=numbers, args=['b'])
-    job.run_single_processed(debug=True)
-    print 'Successfully ran single processed test!'
-    job.run_multi_processed(debug=True)
-    print 'Successfully ran multi processed test!'
-
-    job = Job(func=outputting_useless_func, items=numbers)
-    output = job.run_single_processed(debug=True)
-    assert set(output) == set(numbers)
-    print 'Successfully captured output of single processed test!'
-    output = job.run_multi_processed(debug=True)
-    assert set(output) == set(numbers)
-    print 'Successfully captured output of multi processed test!'
-
-    # test_updates_made_by_worker_propogate_to_parent()
