@@ -2,7 +2,7 @@ import os
 import sys
 spychronous_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path += [spychronous_dir]
-from spychronous import Job, run_function
+from spychronous import SynchronousJob, run_function
 import unittest
 import multiprocessing
 
@@ -20,31 +20,31 @@ class TestRun(object):
         self.instance_method_name = None
 
     def test_worker_return_values_collected(self):
-        plus_num_job = Job(func=get_plus_num, items=self.items, args=[self.addend])
+        plus_num_job = SynchronousJob(func=get_plus_num, items=self.items, args=[self.addend])
         new_items = getattr(plus_num_job, self.instance_method_name)()
         items_plus_addend = map(lambda i: i+self.addend, self.items)
         self.assertEqual(new_items, items_plus_addend)
 
-        # test that no values are collected when job fails.
-        zero_div_error_job = Job(func=perform_ZeroDivisionError, items=self.items)
+        # test that no values are collected when SynchronousJob fails.
+        zero_div_error_job = SynchronousJob(func=perform_ZeroDivisionError, items=self.items)
         with self.assertRaises(ZeroDivisionError):
             output = getattr(zero_div_error_job, self.instance_method_name)()
         with self.assertRaises(UnboundLocalError): # output was never able to be defined.
             output
 
         # test outputs are collected when worker exceptions aren't raised.
-        allowing_number_except_3_job = Job(func=get_number_except_perform_ZeroDivisionError_on_3, items=self.items, suppress_worker_exceptions=True)
+        allowing_number_except_3_job = SynchronousJob(func=get_number_except_perform_ZeroDivisionError_on_3, items=self.items, suppress_worker_exceptions=True)
         output = getattr(allowing_number_except_3_job, self.instance_method_name)()
         self.assertEqual(output, self.items_without_3)
         
     def test_suppress_raised_worker_exceptions(self):
         # testing the opposite first.
-        zero_div_error_job = Job(func=perform_ZeroDivisionError, items=self.items, suppress_worker_exceptions=False)
+        zero_div_error_job = SynchronousJob(func=perform_ZeroDivisionError, items=self.items, suppress_worker_exceptions=False)
         with self.assertRaises(ZeroDivisionError):
             getattr(zero_div_error_job, self.instance_method_name)()
 
         # testing correct behavior.
-        zero_div_error_job = Job(func=get_number_except_perform_ZeroDivisionError_on_3, items=self.items, suppress_worker_exceptions=True)
+        zero_div_error_job = SynchronousJob(func=get_number_except_perform_ZeroDivisionError_on_3, items=self.items, suppress_worker_exceptions=True)
         output = getattr(zero_div_error_job, self.instance_method_name)()
         self.assertEqual(output, self.items_without_3)
 
@@ -55,7 +55,7 @@ class TestRunMultiProcessed(TestRun, unittest.TestCase):
 
     # def test_handle_sigint(self):
     #     this_pid = os.getpid()
-    #     sleeping_job = Job(func=sleep_and_get_item, items=self.items)
+    #     sleeping_job = SynchronousJob(func=sleep_and_get_item, items=self.items)
 
     #     from multiprocessing import Pool
     #     pool = Pool(processes=1)

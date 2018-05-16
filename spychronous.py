@@ -12,14 +12,8 @@ HOURS = 60*60
 DAYS = HOURS*24
 DEFAULT_TIMEOUT = 30 * DAYS
 
-class JobPool(object):
-    """Wraps a multiprocessing.Pool with more contextual method names.
-    """
-    def __init__(self, pool):
-        self.pool = pool
-
-class Job(object):
-    """A synchronous job-runner that leverages parallel processing to apply a function to each item in a list.
+class SynchronousJob(object):
+    """A synchronous Job-runner that leverages parallel processing to apply a function to each item in a list.
         Args:
             func (function): The function that's applied to each item -- the first parameter must represent a single item from items.
             items (list): The dataset that's iterated over and transformed with func.
@@ -27,7 +21,7 @@ class Job(object):
             processes (int):The number of processes you want to enlist for parallelization.
             timeout (int): The number of seconds a given process in the process pool has to complete its work.
             no_daemon (bool): This allows processes in the process pool to spawn more pools of processes.
-            suppress_worker_exceptions (bool): Prevents killing a Job and its workers when any given coworker raises an exception.
+            suppress_worker_exceptions (bool): Prevents killing a SynchronousJob and its workers when any given coworker raises an exception.
     """
     def __init__(self, func=None, items=[], args=[], processes=4, timeout=DEFAULT_TIMEOUT, no_daemon=False, suppress_worker_exceptions=False):
         self.func = func
@@ -40,7 +34,7 @@ class Job(object):
     
     def run_single_processed(self, log_start_finish=False):
         if log_start_finish:
-            LOG.info('Beginning single-processed job...')
+            LOG.info('Beginning single-processed SynchronousJob...')
         worker_outputs = list() # This will accumulate return values of 'func'.
         for item in self.items:
             try:
@@ -51,12 +45,12 @@ class Job(object):
                 else:
                     LOG.info("Logging '%s:%s' but neglecting to raise it" % (e.__class__.__name__, e.message))
         if log_start_finish:
-            LOG.info('Finished single-processed job...')
+            LOG.info('Finished single-processed SynchronousJob...')
         return worker_outputs
 
     def run_multi_processed(self, log_start_finish=False):
         if log_start_finish:
-            LOG.info('Beginning multi-processed job...')
+            LOG.info('Beginning multi-processed SynchronousJob...')
         # The correct way to handle Ctrl+C/SIGINT with multiprocessing.Pool is to:
         # 1) Make the process ignore SIGINT before a process Pool is created. 
         #    This way created child processes inherit SIGINT handler.
@@ -101,11 +95,11 @@ class Job(object):
 
         pool.join() # wait for worker processes to terminate
         if log_start_finish:
-            LOG.info('Finished multi-processed job...')
+            LOG.info('Finished multi-processed SynchronousJob...')
         return list(worker_outputs)
 
 def run_function(some_function, args, worker_outputs):
-    """This is a method that will be called by every Job worker.
+    """This is a method that will be called by every SynchronousJob worker.
         Args:
             some_function (function): The function that will be applied to 'args'.
             args (list): The complete list of args that supplies some_function's signature.
@@ -113,7 +107,7 @@ def run_function(some_function, args, worker_outputs):
     
         Notes:
             - Stacktraces from exceptions are logged so users can see exactly why a worker failed.
-            - worker_outputs is a multiprocessing.managers.ListProxy for multi_processed Job runs.
+            - worker_outputs is a multiprocessing.managers.ListProxy for multi_processed SynchronousJob runs.
     """
     try:
         output = some_function(*args)
