@@ -70,9 +70,12 @@ class Job(object):
         manager = Manager()
         worker_outputs = manager.list() # This will accumulate return values of 'func'.
 
-        # SIGINT-handling step 2
         pool_params = {'processes':self.processes,
                        'maxtasksperchild':1} # In tandum with timeout, this implements the process timeout.
+        if sys.version_info[0] < 2.7:
+            pool_params.pop('maxtasksperchild')
+
+        # SIGINT-handling step 2
         if self.no_daemon:
             pool = NoDaemonProcessPool(**pool_params)
         else:
