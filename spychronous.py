@@ -55,7 +55,7 @@ class SynchronousJob(object):
         # 1) Make the process ignore SIGINT before a process Pool is created. 
         #    This way created child processes inherit SIGINT handler.
         # 2) Restore the original SIGINT handler in the parent process after a Pool has been created.
-        # 3) Wait on the results with timeout because the default blocking waits ignore all signals.
+        # 3) Wait on the results with timeout because the default "blocking-waits" ignore all signals.
         # ** Based on https://stackoverflow.com/a/35134329/3577492
 
         # SIGINT-handling step 1
@@ -110,7 +110,7 @@ def run_function(some_function, args, worker_outputs):
     
         Notes:
             - Stacktraces from exceptions are logged so users can see exactly why a worker failed.
-            - worker_outputs is a multiprocessing.managers.ListProxy for multi_processed SynchronousJob runs.
+            - Multiprocess note: worker_outputs is a multiprocessing.managers.ListProxy for multi_processed SynchronousJob runs.
     """
     try:
         output = some_function(*args)

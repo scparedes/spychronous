@@ -5,6 +5,10 @@ sys.path += [spychronous_dir]
 from spychronous import SynchronousJob, run_function
 import unittest
 import multiprocessing
+import subprocess
+import shlex
+import signal
+from time import sleep
 
 import logging
 logger = logging.getLogger('spychronous')
@@ -19,7 +23,7 @@ class TestRun(object):
         self.items_without_3 = [i != 3 and i or None for i in self.items]
         self.instance_method_name = None
 
-    def test_worker_return_values_collected(self):
+    def test_worker_return_values_are_aggregated(self):
         plus_num_job = SynchronousJob(func=get_plus_num, items=self.items, args=[self.addend])
         new_items = getattr(plus_num_job, self.instance_method_name)()
         items_plus_addend = map(lambda i: i+self.addend, self.items)
@@ -37,7 +41,7 @@ class TestRun(object):
         output = getattr(allowing_number_except_3_job, self.instance_method_name)()
         self.assertEqual(output, self.items_without_3)
         
-    def test_suppress_raised_worker_exceptions(self):
+    def test_suppress_raised_worker_exceptions_and_complete_execution(self):
         # testing the opposite first.
         zero_div_error_job = SynchronousJob(func=perform_ZeroDivisionError, items=self.items, suppress_worker_exceptions=False)
         with self.assertRaises(ZeroDivisionError):
@@ -53,17 +57,34 @@ class TestRunMultiProcessed(TestRun, unittest.TestCase):
         super(TestRunMultiProcessed, self).setUp()
         self.instance_method_name = 'run_multi_processed'
 
-    # def test_handle_sigint(self):
-    #     this_pid = os.getpid()
-    #     sleeping_job = SynchronousJob(func=sleep_and_get_item, items=self.items)
-
-    #     from multiprocessing import Pool
-    #     pool = Pool(processes=1)
-    #     result = pool.apply_async(kill_process, args=(this_pid,), callback=do_nothing)
-    #     # result.get()
-    #     output = sleeping_job.run_multi_processed()
-    #     print 'sleeping_job overrrr!!!'
-
+    def test_handle_sigint(self):
+        # Spin up the never-self-terminating subprocess.
+        python_interpreter = sys.executable # user's current python interpreter.
+        run_forever_script_path = os.path.join(spychronous_dir, 'tests', 'run_forever.py')
+        cmd = python_interpreter + ' ' + run_forever_script_path
+        process = subprocess.Popen(shlex.split(cmd), stderr=subprocess.PIPE) # stderr will contain sigint -- we don't want to see it.
+        # Verify that the subprocess exists and has spawned children.
+        greppable_path = get_greppable(run_forever_script_path)
+        exact_interpreter = run_command("ps -ef | grep '%s' | awk '{ print $8 }'" % greppable_path) # the python path could have been expanded in the subprocess.
+        exact_cmd = exact_interpreter + ' ' + run_forever_script_path
+        greppable_cmd = get_greppable(exact_cmd)
+        parent_pid = run_command("ps -ef | grep '%s' | awk '{ print $2 }'" % greppable_cmd)
+        if not parent_pid:
+            process.send_signal(signal.SIGINT)
+            raise Exception('No parent pid!!!')
+        greppable_pid = get_greppable(parent_pid)
+        children_pids = run_command("ps -ef | grep '%s' | awk '{ print $2 }' | grep -v '%s'" % (greppable_pid, greppable_pid)).splitlines()
+        self.assertGreater(len(children_pids), 0)
+        # Kill the subprocess.
+        process.send_signal(signal.SIGINT)
+        WAIT_PROCESS_DIE_SECS = 1
+        sleep(WAIT_PROCESS_DIE_SECS)
+        # Verify we've killed the subprocess and its children (the children's routine runs forever -- if they aren't dead, sigint didn't propogate properly).
+        self.assertTrue(process.poll())
+        WAIT_CHILDREN_DIE_SECS = 1
+        sleep(WAIT_CHILDREN_DIE_SECS)
+        children_pids = run_command("ps -ef | grep '%s' | awk '{ print $2 }' | grep -v '%s'" % (greppable_pid, greppable_pid)).splitlines()
+        self.assertEqual(len(children_pids), 0)
 
 class TestRunSingleProcessed(TestRun, unittest.TestCase):
     def setUp(self):
@@ -75,7 +96,7 @@ class TestRunFunction(unittest.TestCase):
 
     def setUp(self):
         self.input_args = [1]
-        self.output_nums = [] # we'll collect the output and build upon it as we proceed.
+        self.output_nums = [] # we collect the output and build upon it as we proceed.
 
     def test_run_function(self):
         input_args = self.input_args
@@ -92,8 +113,7 @@ class TestRunFunction(unittest.TestCase):
         self.assertEqual(output_nums, [2, 6, None])
 
 
-
-### SIMPLE USELESS FUNCTIONS TO USE FOR TESTING ###
+### SIMPLE FUNCTIONS TO USE FOR TESTING ###
 def get_plus_one(number):
     return number + 1
 
@@ -108,24 +128,34 @@ def get_number_except_perform_ZeroDivisionError_on_3(number):
         perform_ZeroDivisionError(number)
     return number
 
-def sleep_and_get_item(item):
-    print 'I begin to sleep'
-    from time import sleep
-    sleep(1000)
-    return item
+### HELPER FUNCTIONS ###
+def run_command(cmd):
+    if "|" in cmd:
+        cmd_parts = cmd.split('|')
+    else:
+        cmd_parts = [cmd]
+    p = {}
+    for i, cmd_part in enumerate(cmd_parts):
+        cmd_part = cmd_part.strip()
+        if i == 0:
+            p[i]=subprocess.Popen(shlex.split(cmd_part),stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        else:
+            p[i]=subprocess.Popen(shlex.split(cmd_part),stdin=p[i-1].stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    (stdout_data, std_error_data) = p[i].communicate()
+    exit_code = p[0].wait()
 
-def kill_process(pid):
-    print 'I\'m about to kill'
-    from time import sleep
-    import signal
-    def signal_handler(signal, frame):
-            print('You pressed Ctrl+C!')
-    signal.signal(signal.SIGINT, signal_handler)
-    sleep(3)
-    os.kill(pid,signal.SIGINT)
+    if exit_code != 0:
+        print "Output:"
+        print str(stdout_data)
+        raise Exception(std_error_data)
+    else:
+        return str(stdout_data).strip()
 
-def do_nothing(pid):
-    print 'nothing!'
+def get_greppable(string):
+    """Simply produces a string that -- when grepped -- will omit listing the grep process in a grep listing.
+    """
+    return string.replace(string[0], '[%s]' % string[0], 1)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
