@@ -12,8 +12,8 @@ HOURS = 60*60
 DAYS = HOURS*24
 DEFAULT_TIMEOUT = 30 * DAYS
 
-class SynchronousJob(object):
-    """A synchronous Job-runner that leverages parallel processing to apply a function to each item in a list.
+class Job(object):
+    """A job runner that leverages parallel processing to apply a function to each item in a list.
         Args:
             func (function): The function that's applied to each item -- the first parameter must represent a single item from items.
             items (list): The dataset that's iterated over and transformed with func.
@@ -47,6 +47,12 @@ class SynchronousJob(object):
         if log_start_finish:
             LOG.info('Finished single-processed SynchronousJob...')
         return worker_outputs
+
+class SynchronousJob(Job):
+    """A synchronous job runner that leverages parallel processing to apply a function to each item in a list.
+    """
+    def __init__(self, func=None, items=[], args=[], processes=4, timeout=DEFAULT_TIMEOUT, no_daemon=False, suppress_worker_exceptions=False):
+        super(SynchronousJob, self).__init__(func, items, args, processes, timeout, no_daemon, suppress_worker_exceptions)
 
     def run_multi_processed(self, log_start_finish=False):
         if log_start_finish:
