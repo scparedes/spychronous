@@ -178,10 +178,10 @@ In order to preserve a relationship between input and output, simply wrap your f
 >>> def get_num_times_2(num):
 ...     return num * 2
 ...
->>> def couple_double_num(num):
+>>> def double_num(num): # this is the coupling function.
 ... 	return (num, get_num_times_2(num))
 ...
->>> doubling_job = Job(func=couple_double_num, items=[5])
+>>> doubling_job = Job(func=double_num, items=[5])
 >>> doubling_job.run_multi_processed()
 [(5, 10)]
 ```
