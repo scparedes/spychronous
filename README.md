@@ -4,7 +4,7 @@ A simple synchronous job runner for parallel processing tasks.
 ## spychronous in action
 In case you don't read docs, here's a quick example:
 ```python
-from spychronous import Job
+from spychronous import SynchronousJob as Job
 
 def get_plus_one(num):
     return num + 1
@@ -32,7 +32,7 @@ Say you've written a function to transform a list:
 ```
 Using a spychronous `Job`, you can parallel process the work and apply the function to each item in your list:
 ```python
->>> from spychronous import Job
+>>> from spychronous import SynchronousJob as Job
 >>> plus_one_job = Job(func=get_plus_one, items=items)
 >>> plus_one_job.run_multi_processed()
 [2, 3, 4]
@@ -88,7 +88,8 @@ Job(...suppress_worker_exceptions=True)
 ...     print strftime("%H:%M:%S", gmtime()), item
 ...
 >>> printing_job = Job(func=print_item, items=items)
->>> # we'll print 1) item and item's timestamp 2) Ctrl-C's timestamp
+>>> items = [1, 2, 3]
+>>> # GOAL: print the following: 1) item and item's timestamp 2) Ctrl-C's timestamp
 >>> try:
 ...     printing_job.run_multi_processed()
 ... finally:
@@ -105,10 +106,13 @@ KeyboardInterrupt
 ###### Run Job with Single Process (for dev-ing, debugging, etc.)
 When you plan to parallelize a job, it's helpful to develop with single-processed job execution first (and debug likewise) and then switch to multi-processed job execution when you're ready.  The spychronous `Job` can facilitate this with the `run_single_processed` instance method.
 
-_Utilizing run_single_processed for development:_
+_Utilizing run_single_processed: A Use Case..._
+
+* The following example illustrates the aforementioned proposal for development, debugging, and deployment with `run_single_processed`.
+* Illustrated using 3 different iterations of the same program:
 ```python
 # 1st iteration: Development
-from spychronous import Job
+from spychronous import SynchronousJob as Job
 def get_plus_one(num):
     return num + 1/0
 
@@ -124,7 +128,7 @@ job.run_single_processed()
 ```
 ```python
 # 2nd iteration: Debugging
-from spychronous import Job
+from spychronous import SynchronousJob as Job
 def get_plus_one(num):
     import pdb;pdb.set_trace()
     return num + 1/0
@@ -139,7 +143,7 @@ job.run_single_processed()
 ```
 ```python
 # 3rd iteration: Multiprocessing the Job
-from spychronous import Job
+from spychronous import SynchronousJob as Job
 def get_plus_one(num):
     return num
 
@@ -182,6 +186,8 @@ In order to preserve a relationship between input and output, simply wrap your f
 [(5, 10)]
 ```
 
+## TODO: AsynchronousJob
+The next step for spychronous is an asynchrounous job runner.
 
 ## Why spychronous?
 I made spychronous because I wanted a clean out-of-the-box solution to quickly replace loops that I wanted to parallel process.  I wanted hide burdensome configuration and process management from the user. I wanted a solution that would gracefully handle `SIGINT`.
