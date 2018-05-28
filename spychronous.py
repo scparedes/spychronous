@@ -1,5 +1,6 @@
-from multiprocessing import Pool, Manager
+from multiprocessing import Pool
 from non_daemonic_process.non_daemonic_processing import NoDaemonProcessPool
+from worker_output_containers.output_containers import SingleProcessedWorkerOutputs, WorkerListManager
 import sys
 import signal
 
@@ -11,7 +12,7 @@ LOG = logging.getLogger(__name__)
 HOURS = 60*60
 DAYS = HOURS*24
 DEFAULT_TIMEOUT = 30 * DAYS
-
+    
 class Job(object):
     """A job runner that leverages parallel processing to apply a function to each item in a list.
         Args:
@@ -35,7 +36,7 @@ class Job(object):
     def run_single_processed(self, log_start_finish=False):
         if log_start_finish:
             LOG.info('Beginning single-processed SynchronousJob...')
-        worker_outputs = list() # This will accumulate return values of 'func'.
+        worker_outputs = SingleProcessedWorkerOutputs() # This will accumulate return values of 'func'.
         for item in self.items:
             try:
                 run_function(self.func, [item] + self.args, worker_outputs)
@@ -67,8 +68,9 @@ class SynchronousJob(Job):
         # SIGINT-handling step 1
         original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-        manager = Manager()
-        worker_outputs = manager.list() # This will accumulate return values of 'func'.
+        manager = WorkerListManager()
+        manager.start()
+        worker_outputs = manager.MultiProcessedSynchronousWorkerOutputs() # This will accumulate return values of 'func'.
 
         pool_params = {'processes':self.processes,
                        'maxtasksperchild':1} # In tandum with timeout, this implements the process timeout.
@@ -112,17 +114,16 @@ def run_function(some_function, args, worker_outputs):
         Args:
             some_function (function): The function that will be applied to 'args'.
             args (list): The complete list of args that supplies some_function's signature.
-            worker_outputs (list): The return values of any given some_function result appeneded to this list.
+            worker_outputs (WorkerOutputs): The return values of any given some_function result inserted into the container.
     
         Notes:
             - Stacktraces from exceptions are logged so users can see exactly why a worker failed.
-            - Multiprocess note: worker_outputs is a multiprocessing.managers.ListProxy for multi_processed SynchronousJob runs.
     """
     try:
         output = some_function(*args)
-        worker_outputs.append(output)
+        worker_outputs.add(output)
     except Exception as e:
-        worker_outputs.append(None)
+        worker_outputs.add(None)
         stacktrace = traceback.format_exc()
         LOG.error(stacktrace)
         raise e
