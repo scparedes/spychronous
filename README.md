@@ -167,7 +167,7 @@ In order to call an instance method on a list of objects, simply wrap the instan
 ...     cat.meow()
 ...
 >>> dave = Cat('Dave')
->>> meow_job = Job(func=meow_job, items=[dave])
+>>> meow_job = Job(func=make_cat_meow, items=[dave])
 >>> meow_job.run_multi_processed()
 meow, my name is Dave
 ```
