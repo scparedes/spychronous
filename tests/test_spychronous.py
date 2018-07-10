@@ -95,8 +95,9 @@ class TestRunFunction(unittest.TestCase):
     maxDiff = None
 
     def setUp(self):
+        from worker_output_containers.output_containers import SingleProcessedWorkerOutputs
         self.input_args = [1]
-        self.output_nums = [] # we collect the output and build upon it as we proceed.
+        self.output_nums = SingleProcessedWorkerOutputs() # we collect the output and build upon it as we proceed.
 
     def test_run_function(self):
         input_args = self.input_args

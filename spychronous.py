@@ -1,5 +1,6 @@
-from multiprocessing import Pool, Manager
+from multiprocessing import Pool
 from non_daemonic_process.non_daemonic_processing import NoDaemonProcessPool
+from worker_output_containers.output_containers import SingleProcessedWorkerOutputs, WorkerListManager
 import sys
 import signal
 
@@ -11,9 +12,9 @@ LOG = logging.getLogger(__name__)
 HOURS = 60*60
 DAYS = HOURS*24
 DEFAULT_TIMEOUT = 30 * DAYS
-
-class SynchronousJob(object):
-    """A synchronous Job-runner that leverages parallel processing to apply a function to each item in a list.
+    
+class Job(object):
+    """A job runner that leverages parallel processing to apply a function to each item in a list.
         Args:
             func (function): The function that's applied to each item -- the first parameter must represent a single item from items.
             items (list): The dataset that's iterated over and transformed with func.
@@ -35,7 +36,7 @@ class SynchronousJob(object):
     def run_single_processed(self, log_start_finish=False):
         if log_start_finish:
             LOG.info('Beginning single-processed SynchronousJob...')
-        worker_outputs = list() # This will accumulate return values of 'func'.
+        worker_outputs = SingleProcessedWorkerOutputs() # This will accumulate return values of 'func'.
         for item in self.items:
             try:
                 run_function(self.func, [item] + self.args, worker_outputs)
@@ -47,6 +48,12 @@ class SynchronousJob(object):
         if log_start_finish:
             LOG.info('Finished single-processed SynchronousJob...')
         return worker_outputs
+
+class SynchronousJob(Job):
+    """A synchronous job runner that leverages parallel processing to apply a function to each item in a list.
+    """
+    def __init__(self, func=None, items=[], args=[], processes=4, timeout=DEFAULT_TIMEOUT, no_daemon=False, suppress_worker_exceptions=False):
+        super(SynchronousJob, self).__init__(func, items, args, processes, timeout, no_daemon, suppress_worker_exceptions)
 
     def run_multi_processed(self, log_start_finish=False):
         if log_start_finish:
@@ -61,8 +68,9 @@ class SynchronousJob(object):
         # SIGINT-handling step 1
         original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-        manager = Manager()
-        worker_outputs = manager.list() # This will accumulate return values of 'func'.
+        manager = WorkerListManager()
+        manager.start()
+        worker_outputs = manager.MultiProcessedSynchronousWorkerOutputs() # This will accumulate return values of 'func'.
 
         pool_params = {'processes':self.processes,
                        'maxtasksperchild':1} # In tandum with timeout, this implements the process timeout.
@@ -106,17 +114,16 @@ def run_function(some_function, args, worker_outputs):
         Args:
             some_function (function): The function that will be applied to 'args'.
             args (list): The complete list of args that supplies some_function's signature.
-            worker_outputs (list): The return values of any given some_function result appeneded to this list.
+            worker_outputs (WorkerOutputs): The return values of any given some_function result inserted into the container.
     
         Notes:
             - Stacktraces from exceptions are logged so users can see exactly why a worker failed.
-            - Multiprocess note: worker_outputs is a multiprocessing.managers.ListProxy for multi_processed SynchronousJob runs.
     """
     try:
         output = some_function(*args)
-        worker_outputs.append(output)
+        worker_outputs.add(output)
     except Exception as e:
-        worker_outputs.append(None)
+        worker_outputs.add(None)
         stacktrace = traceback.format_exc()
         LOG.error(stacktrace)
         raise e
