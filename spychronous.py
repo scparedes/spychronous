@@ -109,7 +109,7 @@ class SynchronousJob(Job):
             LOG.info('Finished multi-processed SynchronousJob...')
         
         if not hasattr(worker_outputs, '__iter__') and 'AutoProxy' in worker_outputs.__class__.__name__:
-            worker_outputs.__iter__ = AutoProxy_iter
+            return list(AutoProxy_iter(worker_outputs))
         return list(worker_outputs)
 
 def run_function(some_function, args, worker_outputs):
@@ -131,11 +131,11 @@ def run_function(some_function, args, worker_outputs):
         LOG.error(stacktrace)
         raise e
 
-def AutoProxy_iter(self):
+def AutoProxy_iter(AutoProxyObject):
     """Implements the __iter__ that manager.list() is missing on certain platforms (specifically for AutoProxy's).
     """
     while True:
         try:
-            yield self.pop()
+            yield AutoProxyObject.pop()
         except IndexError:
             break
