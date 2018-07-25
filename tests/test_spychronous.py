@@ -58,17 +58,24 @@ class TestRunMultiProcessed(TestRun, unittest.TestCase):
         self.instance_method_name = 'run_multi_processed'
 
     def test_handle_sigint(self):
+        child_program_name = 'run_forever.py'
+        # Kill any processes with run_forever.py running.
+        process_records = run_command('ps -A')
+        for record in process_records:
+            if child_program_name in record:
+                pid = int(line.split(None, 1)[0])
+                os.kill(pid, signal.SIGKILL)
         # Spin up the never-self-terminating subprocess.
         python_interpreter = sys.executable # user's current python interpreter.
-        run_forever_script_path = os.path.join(spychronous_dir, 'tests', 'run_forever.py')
+        run_forever_script_path = os.path.join(spychronous_dir, 'tests', child_program_name)
         cmd = python_interpreter + ' ' + run_forever_script_path
         process = subprocess.Popen(shlex.split(cmd), stderr=subprocess.PIPE) # stderr will contain sigint -- we don't want to see it.
         # Verify that the subprocess exists and has spawned children.
         greppable_path = get_greppable(run_forever_script_path)
-        exact_interpreter = run_command("ps -ef | grep '%s' | awk '{ print $8 }'" % greppable_path) # the python path could have been expanded in the subprocess.
+        exact_interpreter = run_command("ps -ef | grep '%s' | awk '{ print $8 }'" % greppable_path).splitlines()[0] # the python path could have been expanded in the subprocess.
         exact_cmd = exact_interpreter + ' ' + run_forever_script_path
         greppable_cmd = get_greppable(exact_cmd)
-        parent_pid = run_command("ps -ef | grep '%s' | awk '{ print $2 }'" % greppable_cmd)
+        parent_pid = run_command("ps -ef | grep '%s' | awk '{ print $2 }'" % greppable_cmd).splitlines()[0]
         if not parent_pid:
             process.send_signal(signal.SIGINT)
             raise Exception('No parent pid!!!')

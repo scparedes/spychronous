@@ -1,4 +1,4 @@
-from multiprocessing import Pool
+from multiprocessing import Pool, Manager, managers
 from non_daemonic_process.non_daemonic_processing import NoDaemonProcessPool
 from worker_output_containers.output_containers import SingleProcessedWorkerOutputs, WorkerListManager
 import sys
@@ -107,6 +107,9 @@ class SynchronousJob(Job):
         pool.join() # wait for worker processes to terminate
         if log_start_finish:
             LOG.info('Finished multi-processed SynchronousJob...')
+        
+        if not hasattr(worker_outputs, '__iter__') and 'AutoProxy' in worker_outputs.__class__.__name__:
+            worker_outputs.__iter__ = AutoProxy_iter
         return list(worker_outputs)
 
 def run_function(some_function, args, worker_outputs):
@@ -127,3 +130,12 @@ def run_function(some_function, args, worker_outputs):
         stacktrace = traceback.format_exc()
         LOG.error(stacktrace)
         raise e
+
+def AutoProxy_iter(self):
+    """Implements the __iter__ that manager.list() is missing on certain platforms (specifically for AutoProxy's).
+    """
+    while True:
+        try:
+            yield self.pop()
+        except IndexError:
+            break
