@@ -2,7 +2,7 @@
 A simple synchronous job runner for parallel processing tasks.
 
 ## spychronous in action
-In case you don't read docs, here's a quick example:
+TL;DR Here's a quick example:
 ```python
 from spychronous import SynchronousJob as Job
 
@@ -12,7 +12,7 @@ def get_plus_one(num):
 nums = [1, 2, 3]
 plus_one_job = Job(func=get_plus_one, items=nums)
 
-print Job.run_multi_processed()
+print plus_one_job.run_multi_processed()
 # OUTPUT
 # [2, 3, 4]
 ```
@@ -30,14 +30,14 @@ Say you've written a function to transform a list:
 3
 4
 ```
-Using a spychronous `Job`, you can parallel process the work and apply the function to each item in your list:
+Using a spychronous `Job`, you can parallel process the work by telling spychronous to apply the function to each item in your list:
 ```python
 >>> from spychronous import SynchronousJob as Job
 >>> plus_one_job = Job(func=get_plus_one, items=items)
 >>> plus_one_job.run_multi_processed()
 [2, 3, 4]
 ```
-Say you need _more_ arguments than an item from your list, like a `multiplier`:
+Now imagine your function changes to require _more_ arguments than simply an item from your list, like a `multiplier`:
 ``` python
 >>> from time import sleep
 >>> from random import random
@@ -56,7 +56,7 @@ _Notice the first parameter will hold a single `item` from `Job`'s `items` and a
 >>>	numbers_job.run_multi_processed()
 [8, 4, 6]
 ```
-_Notice there's no guaranteed order of the output._
+_Notice there's no guaranteed order of the output. See [Coupling output to input](#coupling-output-to-input) for tips on working with this behavior._
 #### Important Configurable Features
 If you need to set process pool size, set worker timeouts, handle Ctrl-C, or run your job single-processed (to debug, for instance), the following features come in handy.
 ###### Process Pool Size
@@ -187,7 +187,7 @@ In order to preserve a relationship between input and output, simply wrap your f
 ```
 
 ## TODO: AsynchronousJob, Thread Pools
-The next step for spychronous is an asynchrounous job runner.  After that, thread pools will be implemented as an alternative to process pools.
+The next step for spychronous is an asynchrounous job runner.  This is being developed int the develop branch.  After that, thread pools will be implemented as an alternative to process pools.
 
 ## Why spychronous?
 I made spychronous because I wanted a clean out-of-the-box solution to quickly replace loops that I wanted to parallel process.  I wanted hide burdensome configuration and process management from the user. I wanted a solution that would gracefully handle `SIGINT`.
