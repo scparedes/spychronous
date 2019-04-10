@@ -187,7 +187,7 @@ In order to preserve a relationship between input and output, simply wrap your f
 ```
 
 ## TODO: AsynchronousJob, Thread Pools
-The next step for spychronous is an asynchrounous job runner.  This is being developed int the develop branch.  After that, thread pools will be implemented as an alternative to process pools.
+The next step for spychronous is an asynchrounous job runner.  This is being developed in the develop branch.  After that, thread pools will be implemented as an alternative to process pools.
 
 ## Why spychronous?
 I made spychronous because I wanted a clean out-of-the-box solution to quickly replace loops that I wanted to parallel process.  I wanted hide burdensome configuration and process management from the user. I wanted a solution that would gracefully handle `SIGINT`.
