@@ -17,7 +17,7 @@ print plus_one_job.run_multi_processed()
 # [2, 3, 4]
 ```
 ## Working with spychronous
-Say you've written a function to transform a list:
+Say you've written a function that will be repeatedly called to transform a list:
 ```python
 >>> def get_plus_one(item):
 ...     return item + 1
