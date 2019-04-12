@@ -30,7 +30,7 @@ Say you've written a function that will be repeatedly called to transform a list
 3
 4
 ```
-Using a spychronous `Job`, you can parallel process the work by telling spychronous to apply the function to each item in your list:
+Using a spychronous `Job` instead, you can _parallel process_ the list-transformation (and repeatedly apply your function to each item in your list):
 ```python
 >>> from spychronous import SynchronousJob as Job
 >>> plus_one_job = Job(func=get_plus_one, items=items)
