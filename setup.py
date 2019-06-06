@@ -8,7 +8,7 @@ with open('README.md', 'r') as fh:
 setup(
   name = 'spychronous',
   py_modules = ['spychronous'],
-  packages=find_packages(),
+  packages=find_packages('src'),
   package_dir={'':'src'},
   version = version,
   license='MIT',
