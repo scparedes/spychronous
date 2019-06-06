@@ -1,12 +1,16 @@
-from setuptools import setup
+from setuptools import setup, find_packages
+
+version = '1.0.post4'
 
 with open('README.md', 'r') as fh:
   long_description = fh.read()
+
 setup(
   name = 'spychronous',
   py_modules = ['spychronous'],
+  packages=find_packages(),
   package_dir={'':'src'},
-  version = '1.0.post3',
+  version = version,
   license='MIT',
   description = 'A simple synchronous job runner for parallel processing tasks in Python.',
   long_description = long_description,
@@ -14,8 +18,8 @@ setup(
   author = 'Santiago C Paredes',
   author_email = 'santiago.paredes2012@gmail.com',
   url = 'https://github.com/scparedes/spychronous',
-  download_url = 'https://github.com/scparedes/spychronous/releases/download/1.0.post3/spychronous-1.0.post3.tar.gz',
-  keywords = ['multiprocessing', 'multiprocess', 'multi', 'process', 'synchronous', 'job', 'runner'],
+  download_url = 'https://github.com/scparedes/spychronous/releases/download/%s/spychronous-%s.tar.gz' % (version, version),
+  keywords = ['multiprocessing', 'multiprocess', 'multi', 'process', 'synchronous', 'job', 'runner', 'simple'],
   install_requires=[
   ],
   classifiers=[
